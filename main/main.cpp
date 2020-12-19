@@ -3,96 +3,187 @@
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "DIFU_I2C.h"
 #include "driver/gpio.h"
 #include <esp_log.h>
 #include <esp_err.h>
 
-// #define PIN_NUM_MISO 18 
-// #define PIN_NUM_MOSI 23
-// #define PIN_NUM_CLK  19
-// #define PIN_NUM_CS   13
+#include "driver/gpio.h"
+#include "driver/ledc.h"
+#include "driver/dac.h"
+#include "driver/timer.h"
+
+#define TURN_ON_LED gpio_set_level(GPIO_NUM_27,0)
+#define TURN_OFF_LED gpio_set_level(GPIO_NUM_27,1)
+
+#define ALLOW_DATA gpio_set_level(GPIO_NUM_26,1)
+#define UNALLOW_DATA gpio_set_level(GPIO_NUM_26,0)
+
+#define R1_SET(x) gpio_set_level(GPIO_NUM_23,x)
+#define G1_SET(x) gpio_set_level( GPIO_NUM_4,x)
+#define B1_SET(x) gpio_set_level( GPIO_NUM_5,x)
+
+#define R2_SET(x) gpio_set_level(GPIO_NUM_12,x)
+#define G2_SET(x) gpio_set_level(GPIO_NUM_13,x)
+#define B2_SET(x) gpio_set_level(GPIO_NUM_14,x)
+
+#define PIXCEL_PART1(r,g,b) do{R1_SET(r);G1_SET(g);B1_SET(b);} while(0)
+#define PIXCEL_PART2(r,g,b) do{R2_SET(r);G2_SET(g);B2_SET(b);} while(0)
+
+#define CHOOSE_ROW(row) do{gpio_set_level(GPIO_NUM_15,(row>>0)&1);gpio_set_level(GPIO_NUM_19,(row>>1)&1);gpio_set_level(GPIO_NUM_21,(row>>2)&1);gpio_set_level(GPIO_NUM_22,(row>>3)&1);} while(0)
+
+#define EMPTY_LINE do{TURN_ON_LED;}while(0)
+
+#define LATCH do{ALLOW_DATA;UNALLOW_DATA;}while(0)
+
+#define MAKE_CLOCK(x) do{gpio_set_level(x,1);gpio_set_level(x,0);} while(0)
+
+static const char TAG[]="esp32_nek";
+
+uint8_t red =0 ;
+uint8_t green =0;
+uint8_t blue =0;
+uint8_t count=0;
+uint8_t buffer[3][64];
 
 extern "C" {
     void app_main(void);
-    // void _spi1_init_bus(void);
-    // void _spi1_transmit(spi_device_handle_t handle_spi,uint8_t *data);
+    void send_whole_row(uint8_t _r1,uint8_t _g1,uint8_t _b1,uint8_t _r2,uint8_t _g2,uint8_t _b2);
+    void set_pixcel(uint8_t _r,uint8_t _g,uint8_t _b,uint32_t row,uint32_t column);
+    void IRAM_ATTR timer_group0_isr(void *arg);
 }
-// uint8_t data_rev[32];
-// uint8_t data_send[32];
-static const char TAG[]="esp32_nek";
-// spi_device_handle_t spi;
-//--------------------------------------------//
 
-// static void cs_high(spi_transaction_t* t)
-// {
-//     ESP_LOGI(TAG, "cs high");
-//     gpio_set_level(GPIO_NUM_13,1);
-// }
+void set_pixcel(uint8_t _r,uint8_t _g,uint8_t _b,uint32_t row,uint32_t column){
 
-// static void cs_low(spi_transaction_t* t)
-// {
-//     ESP_LOGI(TAG, "cs low");
-//     gpio_set_level(GPIO_NUM_13,0);
-// }
+red =0;
+green=0;
+blue=0;
+            
+            CHOOSE_ROW(row);
+            TURN_OFF_LED;
 
-// void _spi1_init_bus()
-// {
-//     /* config bus */
-//     spi_bus_config_t bus_cf={0};
-//     bus_cf.miso_io_num=PIN_NUM_MISO;
-//     bus_cf.mosi_io_num=PIN_NUM_MOSI;
-//     bus_cf.sclk_io_num=PIN_NUM_CLK;
-//     bus_cf.quadwp_io_num = -1;
-//     bus_cf.quadhd_io_num = -1;
-//     bus_cf.max_transfer_sz = 32;
+            for(int col = 0; col < 64 ; col ++){
+                if(col < 3){
+                    red=0;
+                    green=0;
+                    blue=0;
+                }
+                red = buffer[0][col];
+                green =buffer[1][col];
+                blue = buffer[2][col];
 
-//     esp_err_t ret = spi_bus_initialize(SPI1_HOST,&bus_cf,2);
-//     ESP_ERROR_CHECK(ret);
-//     ESP_LOGE(TAG,"%s",esp_err_to_name(ret));
+                // vTaskDelay((4)/portTICK_PERIOD_MS);
+                MAKE_CLOCK(GPIO_NUM_25);
 
-//     /* config device connected */
-//     spi_device_interface_config_t devcf={0};
-//     devcf.clock_speed_hz=1000000;
-//     devcf.spics_io_num=PIN_NUM_CS;
-//     devcf.queue_size=1;
-//     devcf.mode=0;
-//     devcf.input_delay_ns=500;
-//     devcf.flags =SPI_DEVICE_POSITIVE_CS;
-//     devcf.pre_cb=cs_high;
-//     devcf.post_cb=cs_low;
+            }
+            LATCH;
+            TURN_ON_LED; 
+            
+            vTaskDelay((1)/portTICK_PERIOD_MS);
 
-//     ESP_ERROR_CHECK(spi_bus_add_device(SPI1_HOST,&devcf,&spi));
-// }
-// void _spi1_transmit(spi_device_handle_t handle_spi,uint8_t *data)
-// {
-//     spi_transaction_t t={0};
-//     memset(&t, 0, sizeof(t));     
-//     t.length=4*8;                
-//     t.tx_buffer=data;               
-//     t.user=(void*)1; 
-//     esp_err_t err = spi_device_polling_transmit(handle_spi, &t);
-// }
+}
+
+void IRAM_ATTR timer_group0_isr(void *arg){
+    
+    (count< red)? R1_SET(1):R1_SET(0);
+    (count< green)? G1_SET(1):G1_SET(0);
+    (count< blue)? B1_SET(1):B1_SET(0);
+    if(count==255){
+        // R1_SET(0);
+        // G1_SET(0);
+        // B1_SET(0);
+        count=0;
+    }else{
+        count++;
+    }
+    
+    TIMERG0.int_clr_timers.t1 = 1;
+    TIMERG0.hw_timer[TIMER_1].config.alarm_en=TIMER_ALARM_EN;
+
+}
+
 void app_main(void)
 {
-    // gpio_pad_select_gpio(GPIO_NUM_13);
-    // gpio_set_direction(GPIO_NUM_13,GPIO_MODE_OUTPUT);
-    // _spi1_init_bus();
-    ESP_LOGE(TAG,"%d",esp_get_free_heap_size());
-    DIFU_I2C *i2c_nek= new DIFU_I2C(0,1,12,13);
-    DIFU_I2C *i2c_nek2= new DIFU_I2C(0,1,12,13);
-    ESP_LOGE(TAG,"%d",esp_get_free_heap_size());
-    uint8_t ret;
+    // ESP_LOGE(TAG,"%d",esp_get_free_heap_size());
+    // vTaskDelay(1000/portTICK_PERIOD_MS);
 
-    ret = i2c_nek->i2c_initial();
-    ESP_LOGI(TAG,"%d",ret);
-    ret=i2c_nek->i2c_master_write();
+    // data pin
+    gpio_pad_select_gpio(GPIO_NUM_15); // A
+    gpio_set_direction(GPIO_NUM_15, GPIO_MODE_OUTPUT);
+    gpio_pad_select_gpio(GPIO_NUM_19); // B
+    gpio_set_direction(GPIO_NUM_19, GPIO_MODE_OUTPUT);
+    gpio_pad_select_gpio(GPIO_NUM_21); // C
+    gpio_set_direction(GPIO_NUM_21, GPIO_MODE_OUTPUT);
+    gpio_pad_select_gpio(GPIO_NUM_22); // D
+    gpio_set_direction(GPIO_NUM_22, GPIO_MODE_OUTPUT);
 
-    ESP_LOGI(TAG,"%d",ret);
-    // i2c_nek->~DIFU_I2C();
-    // i2c_nek2->~DIFU_I2C();
-    ESP_LOGE(TAG,"%d",esp_get_free_heap_size());
-    vTaskDelay(1000/portTICK_PERIOD_MS);
-    ESP_LOGE(TAG,"%d",esp_get_free_heap_size());
+    // Lat pin
+    gpio_pad_select_gpio(GPIO_NUM_26); 
+    gpio_set_direction(GPIO_NUM_26, GPIO_MODE_OUTPUT);
+    gpio_set_level(GPIO_NUM_26,0);
 
+    // OE Pin 
+    gpio_pad_select_gpio(GPIO_NUM_27); 
+    gpio_set_direction(GPIO_NUM_27, GPIO_MODE_OUTPUT);
+
+    // CLK PIN 
+    gpio_pad_select_gpio(GPIO_NUM_25); 
+    gpio_set_direction(GPIO_NUM_25, GPIO_MODE_OUTPUT);
+    gpio_set_level(GPIO_NUM_25,0);
+
+    // RPG pin , RED ( 255,0,0) for 1
+    gpio_pad_select_gpio(GPIO_NUM_23); //R1
+    gpio_pad_select_gpio(GPIO_NUM_4); //G1
+    gpio_pad_select_gpio(GPIO_NUM_5); //B1
+    gpio_set_direction(GPIO_NUM_23, GPIO_MODE_OUTPUT);
+    gpio_set_direction(GPIO_NUM_4, GPIO_MODE_OUTPUT);
+    gpio_set_direction(GPIO_NUM_5, GPIO_MODE_OUTPUT);
+    // RPG pin , RED ( 255,0,0) for 2
+    gpio_pad_select_gpio(GPIO_NUM_12); //R1
+    gpio_pad_select_gpio(GPIO_NUM_13); //G1
+    gpio_pad_select_gpio(GPIO_NUM_14); //B1
+    gpio_set_direction(GPIO_NUM_12, GPIO_MODE_OUTPUT);
+    gpio_set_direction(GPIO_NUM_13, GPIO_MODE_OUTPUT);
+    gpio_set_direction(GPIO_NUM_14, GPIO_MODE_OUTPUT);
+
+    // config timer 
+    timer_config_t timer_cf = {};
+    timer_cf.alarm_en=TIMER_ALARM_EN;
+    timer_cf.counter_dir=TIMER_COUNT_UP;
+    timer_cf.divider= 20;
+    timer_cf.auto_reload=TIMER_AUTORELOAD_EN;
+    timer_cf.counter_en =TIMER_PAUSE;
+    timer_cf.intr_type =TIMER_INTR_LEVEL;
+
+    timer_init(TIMER_GROUP_0,TIMER_1,&timer_cf);
+    timer_set_counter_value(TIMER_GROUP_0,TIMER_1,0);
+    timer_set_alarm_value(TIMER_GROUP_0,TIMER_1,20);
+    
+    // timer_group_intr_enable(TIMER_GROUP_0,TIMER_INTR_T0);
+    timer_enable_intr(TIMER_GROUP_0,TIMER_1);
+    timer_isr_register(TIMER_GROUP_0,TIMER_1,timer_group0_isr,NULL,ESP_INTR_FLAG_IRAM,NULL);
+    timer_start(TIMER_GROUP_0, TIMER_1);
+
+    
+
+    for(int i = 0 ; i < 64 ; i ++){
+        buffer[0][i]=102;
+        buffer[1][i]=0;
+        buffer[2][i]=255;
+    }
+    buffer[0][1]=0;
+    // buffer[1][1]=0;
+    // buffer[2][1]=0;
+    while (1)
+    {
+        for(uint8_t i =0 ; i < 16; i ++){
+            set_pixcel(102,0,255,i,0); 
+        }
+
+
+        
+        
+        
+
+    }
+    
 }
