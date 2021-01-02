@@ -1,14 +1,7 @@
-# put here your custom config value
 menu "Example Configuration"
-config ESP_WIFI_SSID
-    string "WiFi SSID"
-    default "myssid"
-    help
-	SSID (network name) for the example to connect to.
 
-config ESP_WIFI_PASSWORD
-    string "WiFi Password"
-    default "mypassword"
-    help
-	WiFi password (WPA or WPA2) for the example to use.
+    config EXAMPLE_DUMP_ADV_DATA_AND_SCAN_RESP
+        bool "Dump whole adv data and scan response data in example"
+        default n
+
 endmenu
