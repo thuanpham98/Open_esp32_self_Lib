@@ -26,6 +26,13 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 
+/* library for Json */
+#include <limits.h>
+#include <ctype.h>
+#include <cJSON.h>
+#include <cJSON_Utils.h>
+#include "unity.h"
+
 #define NO_DATA_TIMEOUT_SEC 10
 
 static const char *TAG = "WEBSOCKET";
@@ -33,12 +40,16 @@ static const char *TAG = "WEBSOCKET";
 static TimerHandle_t shutdown_signal_timer;
 static SemaphoreHandle_t shutdown_sema;
 
-#define EXAMPLE_ESP_WIFI_SSID      "iotvoip"
-#define EXAMPLE_ESP_WIFI_PASS      "@iotmaker.vn"
+#define EXAMPLE_ESP_WIFI_SSID      "dara.vn"
+#define EXAMPLE_ESP_WIFI_PASS      "6868686868"
 #define EXAMPLE_ESP_MAXIMUM_RETRY  10
-#define CONFIG_WEBSOCKET_URI       "ws://192.168.1.12:8765"
+#define CONFIG_WEBSOCKET_URI       "wss://tnjqqhs9o8.execute-api.ap-southeast-1.amazonaws.com/test"
 
 static EventGroupHandle_t s_wifi_event_group;
+char * test = "POST /test HTTP/1.1 \
+Host: wss://tnjqqhs9o8.execute-api.ap-southeast-1.amazonaws.com \
+{\"action\":\"onMessage\",\"id\":\"esp32\"} \
+Content-Type: application/json" ;
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
@@ -217,6 +228,25 @@ static void shutdown_signaler(TimerHandle_t xTimer)
     xSemaphoreGive(shutdown_sema);
 }
 
+int n=0;
+
+/* make json to post */
+static char *Print_JSON()
+{
+    cJSON *sudo = cJSON_CreateObject();
+    // cJSON *request = cJSON_CreateObject();
+    // cJSON *body = cJSON_CreateObject();
+;
+    cJSON_AddItemToObject(sudo, "action", cJSON_CreateString("onMessage"));
+    cJSON_AddItemToObject(sudo, "id", cJSON_CreateString("esp32"));
+
+
+    char *a = cJSON_Print(sudo);
+    cJSON_Delete(sudo); //if don't free, heap memory will be overload
+    // ESP_LOGI(TAG,"%s",a);
+    return a;
+}
+
 static void websocket_app_start(void)
 {
     esp_websocket_client_config_t websocket_cfg = {};
@@ -226,36 +256,8 @@ static void websocket_app_start(void)
     shutdown_sema = xSemaphoreCreateBinary();
     
     websocket_cfg.uri = CONFIG_WEBSOCKET_URI;
-
-    // websocket_cfg.cert_pem= "-----BEGIN CERTIFICATE-----\r\n"
-    // "MIIEkjCCA3qgAwIBAgIQCgFBQgAAAVOFc2oLheynCDANBgkqhkiG9w0BAQsFADA/\r\n"
-    // "MSQwIgYDVQQKExtEaWdpdGFsIFNpZ25hdHVyZSBUcnVzdCBDby4xFzAVBgNVBAMT\r\n"
-    // "DkRTVCBSb290IENBIFgzMB4XDTE2MDMxNzE2NDA0NloXDTIxMDMxNzE2NDA0Nlow\r\n"
-    // "SjELMAkGA1UEBhMCVVMxFjAUBgNVBAoTDUxldCdzIEVuY3J5cHQxIzAhBgNVBAMT\r\n"
-    // "GkxldCdzIEVuY3J5cHQgQXV0aG9yaXR5IFgzMIIBIjANBgkqhkiG9w0BAQEFAAOC\r\n"
-    // "AQ8AMIIBCgKCAQEAnNMM8FrlLke3cl03g7NoYzDq1zUmGSXhvb418XCSL7e4S0EF\r\n"
-    // "q6meNQhY7LEqxGiHC6PjdeTm86dicbp5gWAf15Gan/PQeGdxyGkOlZHP/uaZ6WA8\r\n"
-    // "SMx+yk13EiSdRxta67nsHjcAHJyse6cF6s5K671B5TaYucv9bTyWaN8jKkKQDIZ0\r\n"
-    // "Z8h/pZq4UmEUEz9l6YKHy9v6Dlb2honzhT+Xhq+w3Brvaw2VFn3EK6BlspkENnWA\r\n"
-    // "a6xK8xuQSXgvopZPKiAlKQTGdMDQMc2PMTiVFrqoM7hD8bEfwzB/onkxEz0tNvjj\r\n"
-    // "/PIzark5McWvxI0NHWQWM6r6hCm21AvA2H3DkwIDAQABo4IBfTCCAXkwEgYDVR0T\r\n"
-    // "AQH/BAgwBgEB/wIBADAOBgNVHQ8BAf8EBAMCAYYwfwYIKwYBBQUHAQEEczBxMDIG\r\n"
-    // "CCsGAQUFBzABhiZodHRwOi8vaXNyZy50cnVzdGlkLm9jc3AuaWRlbnRydXN0LmNv\r\n"
-    // "bTA7BggrBgEFBQcwAoYvaHR0cDovL2FwcHMuaWRlbnRydXN0LmNvbS9yb290cy9k\r\n"
-    // "c3Ryb290Y2F4My5wN2MwHwYDVR0jBBgwFoAUxKexpHsscfrb4UuQdf/EFWCFiRAw\r\n"
-    // "VAYDVR0gBE0wSzAIBgZngQwBAgEwPwYLKwYBBAGC3xMBAQEwMDAuBggrBgEFBQcC\r\n"
-    // "ARYiaHR0cDovL2Nwcy5yb290LXgxLmxldHNlbmNyeXB0Lm9yZzA8BgNVHR8ENTAz\r\n"
-    // "MDGgL6AthitodHRwOi8vY3JsLmlkZW50cnVzdC5jb20vRFNUUk9PVENBWDNDUkwu\r\n"
-    // "Y3JsMB0GA1UdDgQWBBSoSmpjBH3duubRObemRWXv86jsoTANBgkqhkiG9w0BAQsF\r\n"
-    // "AAOCAQEA3TPXEfNjWDjdGBX7CVW+dla5cEilaUcne8IkCJLxWh9KEik3JHRRHGJo\r\n"
-    // "uM2VcGfl96S8TihRzZvoroed6ti6WqEBmtzw3Wodatg+VyOeph4EYpr/1wXKtx8/\r\n"
-    // "wApIvJSwtmVi4MFU5aMqrSDE6ea73Mj2tcMyo5jMd6jmeWUHK8so/joWUoHOUgwu\r\n"
-    // "X4Po1QYz+3dszkDqMp4fklxBwXRsW10KXzPMTZ+sOPAveyxindmjkW8lGy+QsRlG\r\n"
-    // "PfZ+G6Z6h7mjem0Y+iWlkYcV4PIWL1iwBi8saCbGS5jN2p8M+X+Q7UNKEkROb3N6\r\n"
-    // "KOqkqm57TH2H3eDJAkSnh6/DNFu0Qg==\r\n"
-    // "-----END CERTIFICATE-----\r\n";
-
-    // websocket_cfg.transport=WEBSOCKET_TRANSPORT_OVER_SSL;
+    websocket_cfg.subprotocol ="soap";
+    websocket_cfg.transport=WEBSOCKET_TRANSPORT_OVER_SSL;
 
 
     ESP_LOGI(TAG, "Connecting to %s...", websocket_cfg.uri);
@@ -265,14 +267,26 @@ static void websocket_app_start(void)
 
     esp_websocket_client_start(client);
     xTimerStart(shutdown_signal_timer, portMAX_DELAY);
-    char data[32];
+    
     int i = 0;
     while (i < 10) {
-        while(esp_websocket_client_is_connected(client)) {
-            int len = sprintf(data, "ping form esp32-wroom %04d", i++);
-            ESP_LOGI(TAG, "Sending %s", data);
-            esp_websocket_client_send_text(client, data, len, portMAX_DELAY);
-            // vTaskDelay(1/ portTICK_RATE_MS);
+        if(esp_websocket_client_is_connected(client)){
+            char *data = Print_JSON();
+            ESP_LOGI(TAG,"%s",data);
+            esp_websocket_client_send_text(client, data, sizeof(data), portMAX_DELAY);
+            free(data);
+
+            while(esp_websocket_client_is_connected(client)) {
+                    char data[] = "{\"action\":\"onMessage\",\"id\":\"esp32\"}";
+                // Print_JSON();
+                // "{\"action\":\"onMessage\",\"id\":\"esp32\"}";
+                ESP_LOGI(TAG,"%s",data);
+
+                    esp_websocket_client_send_text(client, data, sizeof(data), portMAX_DELAY);
+                // free(data);
+
+                vTaskDelay(1000/ portTICK_RATE_MS);
+            }
         }
         vTaskDelay(1000 / portTICK_RATE_MS);
     }
@@ -282,6 +296,7 @@ static void websocket_app_start(void)
     ESP_LOGI(TAG, "Websocket Stopped");
     esp_websocket_client_destroy(client);
 }
+
 
 void app_main(void)
 {
