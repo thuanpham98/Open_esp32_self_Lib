@@ -30,39 +30,38 @@ static char *TAG="SPI_TEST";
 #define USER_CTRL 0x6A
 
 spi_device_handle_t spi;
-void test_spi(void *pv);
-void config_MPU9520(spi_device_handle_t _spi);
+// void test_spi(void *pv);
+// void config_MPU9520(spi_device_handle_t _spi);
 
-void send_cmd(spi_device_handle_t _spi, const uint8_t cmd)
-{
-    esp_err_t ret;
-    spi_transaction_t t;
+// void send_cmd(spi_device_handle_t _spi, const uint8_t cmd)
+// {
+//     esp_err_t ret;
+//     spi_transaction_t t;
     
-    spi_transaction_t *_receive;
-    uint8_t data_receive[5];
-    memset(&t, 0, sizeof(t));
-    t.length=8;
-    t.tx_buffer=&cmd;
-    // t.rxlength =1;
-    // t.rx_buffer = data_receive;
-    t.flags = SPI_TRANS_USE_RXDATA;
+//     spi_transaction_t *_receive;
+//     uint8_t data_receive[5];
+//     memset(&t, 0, sizeof(t));
+//     t.length=8;
+//     t.tx_buffer=&cmd;
+//     // t.rxlength =1;
+//     // t.rx_buffer = data_receive;
+//     t.flags = SPI_TRANS_USE_RXDATA;
 
-    ESP_ERROR_CHECK(spi_device_queue_trans(spi, &t, portMAX_DELAY));
-    ESP_LOGI(TAG,"%d",*(uint32_t*)t.rx_data);
+//     ESP_ERROR_CHECK(spi_device_queue_trans(spi, &t, portMAX_DELAY));
+//     ESP_LOGI(TAG,"%d",*(uint32_t*)t.rx_data);
 
-    ESP_ERROR_CHECK(spi_device_get_trans_result(spi, &_receive, portMAX_DELAY));
-ESP_LOGI(TAG,"%d",t.rx_data[0]);
-    // free(data_receive);
-    // free(_receive);
-}
+//     ESP_ERROR_CHECK(spi_device_get_trans_result(spi, &_receive, portMAX_DELAY));
+// ESP_LOGI(TAG,"%d",t.rx_data[0]);
+ 
+// }
 
-void config_MPU9520(spi_device_handle_t _spi){
-    esp_err_t ret;
-    spi_transaction_t _transmit;
-    spi_transaction_t *_receive=NULL;
-    uint8_t receidata[5];
+// void config_MPU9520(spi_device_handle_t _spi){
+//     esp_err_t ret;
+//     spi_transaction_t _transmit;
+//     spi_transaction_t *_receive=NULL;
+//     uint8_t receidata[5];
 
-    send_cmd(spi,0x68);
+//     send_cmd(spi,0x68);
 
     // memset(&_transmit, 0, sizeof(_transmit));
     // _transmit.length=8;
@@ -101,20 +100,20 @@ void config_MPU9520(spi_device_handle_t _spi){
     // _transmit.flags=SPI_TRANS_USE_TXDATA;            //The data is the cmd itself
     // ESP_ERROR_CHECK(spi_device_queue_trans(spi, &_transmit, portMAX_DELAY));  //Transmit!
 
-}
+// }
 
-void test_spi(void *pv){
-    esp_err_t ret;
-    spi_transaction_t t;
-    spi_transaction_t *rtrans =NULL;
+// void test_spi(void *pv){
+//     esp_err_t ret;
+//     spi_transaction_t t;
+//     spi_transaction_t *rtrans =NULL;
 
-    config_MPU9520(spi);
+//     config_MPU9520(spi);
 
-    while(1){
-        ESP_LOGI(TAG,"ok");
-        vTaskDelay(1000/portTICK_RATE_MS);
-    }
-}
+//     while(1){
+//         ESP_LOGI(TAG,"ok");
+//         vTaskDelay(1000/portTICK_RATE_MS);
+//     }
+// }
 
 void app_main(void)
 {
@@ -141,5 +140,32 @@ void app_main(void)
     ret=spi_bus_add_device(SPI2, &devcfg, &spi);
     ESP_ERROR_CHECK(ret);
 
-    xTaskCreate(test_spi,"test_spi",2048,NULL,4,NULL);
+    // xTaskCreate(test_spi,"test_spi",2048,NULL,4,NULL);
+
+    spi_transaction_t t;
+    // spi_transaction_t *_receive;
+
+    uint8_t data_receive[5];
+    uint8_t data_send[5];
+    uint8_t *_pointer;
+
+    data_send[0]=0x68|0x80;
+
+    memset(&t, 0, sizeof(t));
+    t.length=8;                     //Command is 8 bits
+    t.tx_buffer=&data_send[0];               //The data is the cmd itself
+    t.user=(void*)0;                //D/C needs to be set to 0
+    ret=spi_device_polling_transmit(spi, &t);  //Transmit!
+    assert(ret==ESP_OK);            //Should have had no issues.
+
+    memset(&t, 0, sizeof(t));
+    t.length=8;
+    t.flags = SPI_TRANS_USE_RXDATA;
+    t.user = (void*)1;
+
+    ret = spi_device_polling_transmit(spi, &t);
+    assert( ret == ESP_OK );
+    
+    // _pointer=t.rx_data;
+    ESP_LOGI(TAG,"%d",t.rx_data[1]);
 }
