@@ -6,7 +6,8 @@ set(COMPONENT_SRCS "main.c"
                     "esp_hid_gap.c")
 set(COMPONENT_ADD_INCLUDEDIRS "")
 
-set(include_dirs "/include")
+{% comment %} 
+set(include_dirs "/include") {% endcomment %}
 
 register_component()
 
