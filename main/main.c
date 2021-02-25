@@ -18,10 +18,10 @@ static char *TAG="SPI_TEST";
 #define SPI2    HSPI_HOST
 #define DMA_CHAN    2
 
-#define PIN_NUM_MISO 12
-#define PIN_NUM_MOSI 13
-#define PIN_NUM_CLK  14
-#define PIN_NUM_CS   15
+#define PIN_NUM_MISO 27
+#define PIN_NUM_MOSI 26
+#define PIN_NUM_CLK  25
+#define PIN_NUM_CS   5
 
 #define READ_BIT 0x80
 #define WRITE_BIT 0x7F
@@ -57,8 +57,8 @@ spi_device_handle_t spi;
 
 // void config_MPU9520(spi_device_handle_t _spi){
 //     esp_err_t ret;
-//     spi_transaction_t _transmit;
-//     spi_transaction_t *_receive=NULL;
+    // spi_transaction_t _transmit;
+    // spi_transaction_t *_receive=NULL;
 //     uint8_t receidata[5];
 
 //     send_cmd(spi,0x68);
@@ -124,48 +124,46 @@ void app_main(void)
     buscfg.sclk_io_num=PIN_NUM_CLK;
     buscfg.quadwp_io_num=-1;
     buscfg.quadhd_io_num=-1;
-    buscfg.max_transfer_sz=1000;
+    buscfg.max_transfer_sz=4096;
     
     spi_device_interface_config_t devcfg={0};
     devcfg.clock_speed_hz=1*1000*1000;
     devcfg.mode=0;                        // cuc dong bo 3 pha , CPOL $ CPHA  
     devcfg.spics_io_num=PIN_NUM_CS;              
-    devcfg.queue_size=7;            
+    devcfg.queue_size=10;            
     // devcfg.pre_cb=lcd_spi_pre_transfer_callback,
 
     //Initialize the SPI bus
-    ret=spi_bus_initialize(SPI2, &buscfg, DMA_CHAN);
+    ret=spi_bus_initialize(SPI2, &buscfg,0);
     ESP_ERROR_CHECK(ret);
     //Attach the LCD to the SPI bus
     ret=spi_bus_add_device(SPI2, &devcfg, &spi);
     ESP_ERROR_CHECK(ret);
 
-    // xTaskCreate(test_spi,"test_spi",2048,NULL,4,NULL);
+    spi_transaction_t _transmit;
+    spi_transaction_t _t;
+    spi_transaction_t *_receive;
+    uint8_t data[5];
+        // ping Who Am I 
+    memset(&_transmit, 0, sizeof(_transmit));       //Zero out the transaction
+    memset(&_t, 0, sizeof(_t));
+    // memset(_receive, 0, sizeof(_receive));
+    _transmit.length=8;                     //Command is 8 bits
+    // _transmit.rxlength=8;
+    data[0]=0x75 || 0x80;
+    _transmit.tx_buffer=&data[0];   
 
-    spi_transaction_t t;
-    // spi_transaction_t *_receive;
-
-    uint8_t data_receive[5];
-    uint8_t data_send[5];
-    uint8_t *_pointer;
-
-    data_send[0]=0x68|0x80;
-
-    memset(&t, 0, sizeof(t));
-    t.length=8;                     //Command is 8 bits
-    t.tx_buffer=&data_send[0];               //The data is the cmd itself
-    t.user=(void*)0;                //D/C needs to be set to 0
-    ret=spi_device_polling_transmit(spi, &t);  //Transmit!
-    assert(ret==ESP_OK);            //Should have had no issues.
-
-    memset(&t, 0, sizeof(t));
-    t.length=8;
-    t.flags = SPI_TRANS_USE_RXDATA;
-    t.user = (void*)1;
-
-    ret = spi_device_polling_transmit(spi, &t);
-    assert( ret == ESP_OK );
+    ret=spi_device_polling_transmit(spi, &_transmit);  //Transmit!
+    assert(ret==ESP_OK);
     
-    // _pointer=t.rx_data;
-    ESP_LOGI(TAG,"%d",t.rx_data[1]);
+    _t.length=8*3;
+    _t.flags = SPI_TRANS_USE_RXDATA;
+    // _t.user = (void*)1;
+
+    ret = spi_device_polling_transmit(spi, &_t);
+    assert( ret == ESP_OK );
+
+    ESP_LOGI(TAG,"%d",*(uint32_t*)_t.rx_data);
+
+
 }
