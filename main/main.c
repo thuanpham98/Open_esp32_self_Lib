@@ -9,161 +9,140 @@
 
 #include "driver/gpio.h"
 #include "driver/ledc.h"
-#include "driver/dac.h"
+#include "driver/spi_master.h"
 #include "driver/timer.h"
 #include "driver/spi_master.h"
 
 static char *TAG="SPI_TEST";
 
-#define SPI2    HSPI_HOST
-#define DMA_CHAN    2
+#define DMA_CHAN    1
 
-#define PIN_NUM_MISO 27
-#define PIN_NUM_MOSI 26
-#define PIN_NUM_CLK  25
-#define PIN_NUM_CS   5
+#define PIN_NUM_MISO 12
+#define PIN_NUM_MOSI 13
+#define PIN_NUM_CLK  14
+#define PIN_NUM_CS   15
 
 #define READ_BIT 0x80
-#define WRITE_BIT 0x7F
-#define SLAVE_ADDR 0x68
 
-#define USER_CTRL 0x6A
+spi_device_handle_t mpu9250_spi_handle;
+uint8_t receive_data[5];
 
-spi_device_handle_t spi;
-// void test_spi(void *pv);
-// void config_MPU9520(spi_device_handle_t _spi);
-
-// void send_cmd(spi_device_handle_t _spi, const uint8_t cmd)
+//This function is called with every interrupt
+// static void IRAM_ATTR mpu_isr(void *discard)
 // {
-//     esp_err_t ret;
-//     spi_transaction_t t;
-    
-//     spi_transaction_t *_receive;
-//     uint8_t data_receive[5];
-//     memset(&t, 0, sizeof(t));
-//     t.length=8;
-//     t.tx_buffer=&cmd;
-//     // t.rxlength =1;
-//     // t.rx_buffer = data_receive;
-//     t.flags = SPI_TRANS_USE_RXDATA;
-
-//     ESP_ERROR_CHECK(spi_device_queue_trans(spi, &t, portMAX_DELAY));
-//     ESP_LOGI(TAG,"%d",*(uint32_t*)t.rx_data);
-
-//     ESP_ERROR_CHECK(spi_device_get_trans_result(spi, &_receive, portMAX_DELAY));
-// ESP_LOGI(TAG,"%d",t.rx_data[0]);
- 
+//   spi_transaction_t t = {};
+//   uint8_t tx_buffer[2] = {0x00, 0x00};
+//   t.length = 2 * 8;
+//   t.flags = SPI_TRANS_USE_RXDATA; 
+//   t.tx_buffer = tx_buffer;
+//   t.cmd = MPUREG_ACCEL_XOUT_H | READ_FLAG;                                      
+//   spi_device_queue_trans(mpu9250_spi_handle, &t, 0);
 // }
 
-// void config_MPU9520(spi_device_handle_t _spi){
-//     esp_err_t ret;
-    // spi_transaction_t _transmit;
-    // spi_transaction_t *_receive=NULL;
-//     uint8_t receidata[5];
+// void task_mpu9250(void *pvParameters)
+// {
+//   // Create a queue capable of containing 20 int16 values.
+//   data_queue = xQueueCreate(20, sizeof(int16_t));
 
-//     send_cmd(spi,0x68);
-
-    // memset(&_transmit, 0, sizeof(_transmit));
-    // _transmit.length=8;
-    // _transmit.flags = SPI_TRANS_USE_RXDATA;
-    // _transmit.user = (void*)1;
-    // _transmit.rxlength = 8;
-    // *(uint8_t *)(_transmit.tx_buffer)=(0x80|0x68); 
-
-    // ESP_ERROR_CHECK(spi_device_queue_trans(spi, &_transmit, portMAX_DELAY));
-    // ESP_ERROR_CHECK(spi_device_get_trans_result(spi, &_receive, portMAX_DELAY));
-    // assert( ret == ESP_OK );
-
-    // ESP_LOGI(TAG,"%d",_transmit.rx_data[0]);
-
-    // return *(uint32_t*)t.rx_data;
-
-    // ping Who Am I 
-    // memset(&_transmit, 0, sizeof(_transmit));       //Zero out the transaction
-    // memset(_receive, 0, sizeof(_receive));
-    // _transmit.length=8;                     //Command is 8 bits
-    // _transmit.tx_data[0]=0x68 || 0x80;   
-    // _transmit.flags=SPI_TRANS_USE_TXDATA  | SPI_TRANS_USE_RXDATA;             //The data is the cmd itself
-    // ESP_ERROR_CHECK(spi_device_queue_trans(spi, &_transmit, portMAX_DELAY));  //Transmit!
-    // vTaskDelay(10/portTICK_PERIOD_MS);
-
-    // _receive->flags=SPI_TRANS_USE_RXDATA;
-    // _receive->rx_buffer = receidata;
-    // ESP_ERROR_CHECK(spi_device_get_trans_result(spi, &_receive, portMAX_DELAY));
-
-    // ESP_LOGI(TAG,"%d", _receive->rx_data[0]);
-
-    // disable I2c mode
-    // memset(&_transmit, 0, sizeof(_transmit));       //Zero out the transaction
-    // _transmit.length=8;                     //Command is 8 bits
-    // _transmit.tx_data[0]=0x10;   
-    // _transmit.flags=SPI_TRANS_USE_TXDATA;            //The data is the cmd itself
-    // ESP_ERROR_CHECK(spi_device_queue_trans(spi, &_transmit, portMAX_DELAY));  //Transmit!
-
+//   mpu9250_init_spi();
+//   // Check if connection to Sensor is ok
+//   if (mpu9250_whoami())
+//   {
+//     mpu9250_init();
+//     gpio_set_intr_type(PIN_MPU_INT, GPIO_INTR_NEGEDGE); 
+//     gpio_install_isr_service(0);
+//     gpio_isr_handler_add(PIN_MPU_INT, mpu_isr, (void *)PIN_MPU_INT);
+//   }
+//   vTaskDelete(NULL);
 // }
 
-// void test_spi(void *pv){
-//     esp_err_t ret;
-//     spi_transaction_t t;
-//     spi_transaction_t *rtrans =NULL;
+// This is called as a post SPI transaction 
+uint8_t flad =0;
+void mpu9250_post_spi_trans()
+{
+    // int16_t data_buffer;
+    // data_buffer = ((int16_t)t->rx_data[0] << 8) | t->rx_data[1];
+    // ESP_LOGI(TAG,"%d",data_buffer);
+    ESP_LOGI(TAG,"DONE send");
+    ESP_LOGI(TAG,"%d",receive_data[0]);
+    flad=1;
 
-//     config_MPU9520(spi);
+}
 
-//     while(1){
-//         ESP_LOGI(TAG,"ok");
-//         vTaskDelay(1000/portTICK_RATE_MS);
-//     }
-// }
+void mpu9250_init_spi()
+{
+  esp_err_t ret;
+  spi_bus_config_t buscfg = {.miso_io_num = PIN_NUM_MISO,
+                             .mosi_io_num = PIN_NUM_MOSI,
+                             .sclk_io_num = PIN_NUM_CLK,
+                             .quadwp_io_num = -1,
+                             .quadhd_io_num = -1};
+  spi_device_interface_config_t devcfg = {
+      .address_bits =0,
+      .command_bits = 8,                
+      .dummy_bits = 0,                  
+      .mode = 3,       
+      .duty_cycle_pos=0,
+      .cs_ena_posttrans=0,
+      .cs_ena_pretrans =0,
+      .flags=0,                 
+      .clock_speed_hz = 1000000,       
+      .spics_io_num = PIN_NUM_CS,     
+      .queue_size = 1,  
+      .pre_cb = NULL,               
+      .post_cb = NULL ,//mpu9250_post_spi_trans ,
+  };
+                                       
+  ret = spi_bus_initialize(HSPI_HOST, &buscfg, DMA_CHAN); 
+  assert(ret == ESP_OK);
+  ESP_LOGI(TAG, "... Initializing bus.");
+  ret = spi_bus_add_device(HSPI_HOST, &devcfg, &mpu9250_spi_handle);
+  assert(ret == ESP_OK);
+  ESP_LOGI(TAG, "... Adding device bus.");
+}
+
+esp_err_t mpu9250_write_spi_8bit(uint8_t addr , uint8_t data){
+  esp_err_t ret;
+  uint8_t tx_data[1] ;
+  spi_transaction_t trans_desc;
+  memset(&trans_desc, 0, sizeof(trans_desc));
+  
+  trans_desc.addr = 0;
+  trans_desc.cmd = 0;
+  trans_desc.flags  = 0;
+  trans_desc.length = 8; // total data bits
+  trans_desc.tx_buffer = tx_data;
+  tx_data[0] = addr;
+  // tx_data[1] = data;
+  ret= spi_device_queue_trans(mpu9250_spi_handle, &trans_desc, portMAX_DELAY);
+  return ret ;
+}
+esp_err_t mpu9250_read_spi_8bit(uint8_t addr , uint8_t data_size){
+  esp_err_t ret;
+  uint8_t tx_data[2] ;
+  spi_transaction_t trans_desc;
+  memset(&trans_desc, 0, sizeof(trans_desc));
+  
+  trans_desc.addr = 0;
+  trans_desc.cmd = 0;
+  trans_desc.flags  = 0;
+  trans_desc.length = 8 * 2 + 8*data_size; // total data bits
+  trans_desc.tx_buffer = tx_data;
+  trans_desc.rxlength =8*data_size;
+  trans_desc.rx_buffer = receive_data;
+  tx_data[0] = 12;
+  tx_data[1] = 14;
+  ret= spi_device_queue_trans(mpu9250_spi_handle, &trans_desc, portMAX_DELAY);
+  return ret ;
+}
 
 void app_main(void)
 {
-    esp_err_t ret;
-    spi_bus_config_t buscfg={0};
-    buscfg.miso_io_num=PIN_NUM_MISO;
-    buscfg.mosi_io_num=PIN_NUM_MOSI;
-    buscfg.sclk_io_num=PIN_NUM_CLK;
-    buscfg.quadwp_io_num=-1;
-    buscfg.quadhd_io_num=-1;
-    buscfg.max_transfer_sz=4096;
+    mpu9250_init_spi();
     
-    spi_device_interface_config_t devcfg={0};
-    devcfg.clock_speed_hz=1*1000*1000;
-    devcfg.mode=0;                        // cuc dong bo 3 pha , CPOL $ CPHA  
-    devcfg.spics_io_num=PIN_NUM_CS;              
-    devcfg.queue_size=10;            
-    // devcfg.pre_cb=lcd_spi_pre_transfer_callback,
-
-    //Initialize the SPI bus
-    ret=spi_bus_initialize(SPI2, &buscfg,0);
-    ESP_ERROR_CHECK(ret);
-    //Attach the LCD to the SPI bus
-    ret=spi_bus_add_device(SPI2, &devcfg, &spi);
-    ESP_ERROR_CHECK(ret);
-
-    spi_transaction_t _transmit;
-    spi_transaction_t _t;
-    spi_transaction_t *_receive;
-    uint8_t data[5];
-        // ping Who Am I 
-    memset(&_transmit, 0, sizeof(_transmit));       //Zero out the transaction
-    memset(&_t, 0, sizeof(_t));
-    // memset(_receive, 0, sizeof(_receive));
-    _transmit.length=8;                     //Command is 8 bits
-    // _transmit.rxlength=8;
-    data[0]=0x75 || 0x80;
-    _transmit.tx_buffer=&data[0];   
-
-    ret=spi_device_polling_transmit(spi, &_transmit);  //Transmit!
-    assert(ret==ESP_OK);
-    
-    _t.length=8*3;
-    _t.flags = SPI_TRANS_USE_RXDATA;
-    // _t.user = (void*)1;
-
-    ret = spi_device_polling_transmit(spi, &_t);
-    assert( ret == ESP_OK );
-
-    ESP_LOGI(TAG,"%d",*(uint32_t*)_t.rx_data);
-
-
+    vTaskDelay(5/portTICK_PERIOD_MS);
+    while(1){
+      mpu9250_write_spi_8bit(14 , 13);
+        vTaskDelay(500/portTICK_PERIOD_MS);
+    }
 }
