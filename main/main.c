@@ -16,19 +16,10 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
-#include "esp_bt.h"
-#include "esp_bt_defs.h"
-#include "esp_gap_ble_api.h"
-#include "esp_gatts_api.h"
-#include "esp_gatt_defs.h"
-#include "esp_bt_main.h"
-#include "esp_bt_device.h"
 
-#include "esp_hidh.h"
-#include "esp_hid_gap.h"
-#include "esp_hid_button.h"
+// #include "Stream.h"
 
-static const char *TAG = "ESP_HIDH_DEMO";
+static const char *TAG = "Test Stream";
 esp_event_base_t TEST ;
 ESP_EVENT_DECLARE_BASE(TEST);
 ESP_EVENT_DEFINE_BASE(TEST);
@@ -67,17 +58,26 @@ void app_main()
     esp_event_loop_create(&loop_args, &loop_handle);
 
     esp_event_handler_register_with(loop_handle, "TEST", 1, run_on_event, data);
-    esp_event_handler_register_with(loop_handle, "TEST", 2, run_on_event, data2);
-    
-    int32_t id1=1;
-    int32_t id2=2;
-    while (1)
-    {
-        esp_event_post_to(loop_handle, TEST, id1,data , sizeof(data),portMAX_DELAY);
+    esp_event_handler_register_with(loop_handle, "TEST", 2, run_on_event, data2);   
+
+            esp_event_post_to(loop_handle, TEST, 1,data , sizeof(data),portMAX_DELAY);
         vTaskDelay(1000/portTICK_RATE_MS);
-        esp_event_post_to(loop_handle, TEST, id2, data2,sizeof(data2),portMAX_DELAY);
+
+    // while (1)
+    // {
+
+        esp_event_post_to(loop_handle, TEST, 2, data2,sizeof(data2),portMAX_DELAY);
         vTaskDelay(1000/portTICK_RATE_MS);
-    }
+        esp_event_handler_unregister_with(loop_handle, TEST, 1, run_on_event);
+        vTaskDelay(1000/portTICK_RATE_MS);
+        esp_event_post_to(loop_handle, TEST, 1,data , sizeof(data),portMAX_DELAY);
+        vTaskDelay(1000/portTICK_RATE_MS); 
+        esp_event_post_to(loop_handle, TEST, 2, data2,sizeof(data2),portMAX_DELAY);
+        vTaskDelay(1000/portTICK_RATE_MS); 
+        esp_event_handler_register_with(loop_handle, "TEST", 1, run_on_event, data);
+        esp_event_post_to(loop_handle, TEST, 1,data , sizeof(data),portMAX_DELAY);
+        vTaskDelay(1000/portTICK_RATE_MS);
+    // }
 
     // esp_event_handler_unregister_with(loop_handle, TEST, 1, run_on_event);  we can call esp_event_post_to but loop so not anything
     vTaskDelay(1000/portTICK_RATE_MS);
